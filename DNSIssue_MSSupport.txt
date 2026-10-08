@@ -1,0 +1,89 @@
+Event Viewer logs 
+DNS Server log:
+•	Event ID 4013 (DNS waiting for AD)
+•	Event ID 4000 / 4007 (AD connectivity issues)
+System log:
+•	Any Netlogon-related errors
+Directory Service log:
+•	Any replication-related issues tied to DNS objects
+
+
+run on working and non working one
+
+nslookup -type=SRV _ldap._tcp.dc._msdcs.me.emh.org
+
+nslookup -type=SRV _ldap._tcp.dc._msdcs.me.emh.org <DNS_IP>
+
+netsh trace start capture=yes scenario=InternetClient persistent=yes overwrite=yes filemode=circular maxsize=4096 globallevel=0xff report=yes tracefile=c:\%computername%.etl
+
+netsh trace stop
+
+Repadmin /showrepl * /csv >showrepl.csv
+
+
+
+nslookup -type=SRV _ldap._tcp.dc._msdcs.me.emh.org 172.24.66.26
+ 
+nslookup -type=SRV _ldap._tcp.dc._msdcs.me.emh.org 172.24.66.28
+
+
+
+Get-WindowsFeature -ComputerName Server01 | Where Installed
+
+repadmin /replicate <Destination_DC_Name> <Source_DC_Name> <Naming_Context_Distinguished_Name
+
+DCFB04 > source 
+
+ 
+DCFB05 > Destination 
+
+ DC=ForestDnsZones,DC=emh,DC=org
+
+repadmin /replicate DCFB04 DCFB05 DC=DomainDnsZones,DC=me, DC=emh,DC=org
+
+
+Enable netlogon
+=====================================
+
+Nltest /DBFlag:2080FFFF
+
+net stop netlogon net start netlogon
+
+nltest /dsgetdc:me.emh.org
+nltest /dsgetdc:emh.org
+
+nltest /sc_query:me.emh.org
+nltest /sc_query:emh.org
+eventvwr.msc
+
+
+
+nslookup -type=SRV _gc._tcp.me.emh.org
+
+nslookup -type=SRV _gc._tcp.emh.org
+
+
+•	We reviewed the affected machine and confirmed the FSMO role holder is:dcfb04.me.emh.org
+•	We tested replication commands for both the Forest DNS Zone and Domain DNS Zone using:
+     repadmin /replicate <Destination_DC_Name> <Source_DC_Name> <Naming_Context_Distinguished_Name>
+•	The replication tests completed successfully and replication was working properly.
+
+ 
+•	We collected a full dcdiag /v from the impacted domain controller and reviewed the results. No errors indicating server health or replication problems were identified.
+•	The customer confirmed the domain controller was introduced into the environment approximately 2–3 weeks ago, and the issue started last week.
+•	We verified the installed roles and configuration on the domain controller.
+•	We also executed:
+ 
+repadmin /syncall /Aed
+
+ 
+•	No major errors were observed. Some replication partners remained in pending or successful states during the synchronization process.
+
+ 
+•	During the review of the dcdiag results, no critical or major issues were identified, and all tests completed properly.
+•	The main concern discussed was related to the OSD application, which depends on the sc_query command as part of its validation process. The customer reported that users were unable to execute this successfully against the PDC.
+•	We explained that this behavior is currently expected when executed against the PDC. Microsoft is aware of the behavior and the issue is currently under internal investigation. At this time, there is no official public documentation available regarding this behavior.
+•	We agreed to lower the severity level from Sev A to Sev B and continue troubleshooting follow-up on Monday.
+•	Guidance and steps for FSMO role migration: https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/view-transfer-fsmo-roles
+Please let us know if you have any additional question, 
+

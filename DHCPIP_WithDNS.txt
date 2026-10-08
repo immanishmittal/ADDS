@@ -1,0 +1,72 @@
+# 1. Define the output CSV file path (Saves directly to your Desktop)
+$CsvPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "Environment_DHCP_Leases_Report.csv"
+ 
+# 2. Discover all authorized DHCP servers in Active Directory
+Write-Host "Discovering authorized DHCP servers in the domain..." -ForegroundColor Cyan
+try {
+    $DhcpServers = Get-DhcpServerInDC
+} catch {
+    Write-Error "Failed to query Active Directory for DHCP servers. Ensure RSAT tools are installed and you are logged into a domain."
+    return
+}
+ 
+if ($null -eq $DhcpServers) {
+    Write-Warning "No authorized DHCP servers found in Active Directory."
+    return
+}
+ 
+# 3. Initialize an array to store the consolidated data
+$AllLeasesReport = [System.Collections.Generic.List[PSCustomObject]]::new()
+ 
+# 4. Loop through each discovered DHCP server
+foreach ($Server in $DhcpServers) {
+    $ServerName = $Server.DnsName
+    Write-Host "Querying server: $ServerName" -ForegroundColor Green
+ 
+    try {
+        # Fetch all scopes configured on the current server
+        $Scopes = Get-DhcpServerv4Scope -ComputerName $ServerName -ErrorAction Stop
+        foreach ($Scope in $Scopes) {
+            # Fetch DNS Server IPs configured for this specific scope (Option ID 6)
+            $DnsOption = Get-DhcpServerv4OptionValue -ComputerName $ServerName -ScopeId $Scope.ScopeId -OptionId 6 -ErrorAction SilentlyContinue
+            # If not set at the scope level, inherit from the global Server Level Options
+            if ($null -eq $DnsOption) {
+                $DnsOption = Get-DhcpServerv4OptionValue -ComputerName $ServerName -OptionId 6 -ErrorAction SilentlyContinue
+            }
+            # Join multiple DNS IPs into a semi-colon separated string to prevent CSV column breaking
+            $DnsIPs = if ($DnsOption) { $DnsOption.Value -join ";" } else { "None Configured" }
+ 
+            # Fetch all active leases for the current scope
+            $Leases = Get-DhcpServerv4Lease -ComputerName $ServerName -ScopeId $Scope.ScopeId -ErrorAction SilentlyContinue
+            foreach ($Lease in $Leases) {
+                # Combine Server, Scope, DNS, and Lease info into a single object
+                $ReportRow = [PSCustomObject]@{
+                    DhcpServer      = $ServerName
+                    ScopeName       = $Scope.Name
+                    ScopeId         = $Scope.ScopeId
+                    DnsServers      = $DnsIPs
+                    ClientIPAddress = $Lease.IPAddress
+                    MacAddress      = $Lease.ClientId
+                    HostName        = $Lease.HostName
+                    AddressState    = $Lease.AddressState
+                    LeaseExpiryTime = $Lease.LeaseExpiryTime
+                }
+                $AllLeasesReport.Add($ReportRow)
+            }
+        }
+    } catch {
+        Write-Warning "Could not connect to or retrieve data from server: $ServerName. ($_)"
+    }
+}
+ 
+# 5. Output and Export the results
+if ($AllLeasesReport.Count -gt 0) {
+    Write-Host "`nSuccessfully gathered $($AllLeasesReport.Count) active leases across the environment." -ForegroundColor Cyan
+    # Export to CSV file
+    $AllLeasesReport | Export-Csv -Path $CsvPath -NoTypeInformation -Encoding UTF8
+    Write-Host "CSV Report successfully exported to: $CsvPath" -ForegroundColor Yellow
+    # Optional: Still pop up the searchable grid view for convenience
+    $AllLeasesReport | Out-GridView -Title "Environment-Wide DHCP Leases Report with DNS IPs"
+} else {
+    Write-Warning "No active leases found on any of the queried DHCP servers. CSV file was not created."
+}

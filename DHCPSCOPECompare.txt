@@ -1,0 +1,73 @@
+# Define servers and scope
+$dhcp1Name = "dhcpag01.me.emh.org"
+$dhcp2Name = "dhcpag02.me.emh.org"
+$scopeId   = "10.27.10.0"
+ 
+# Pull leases
+$dhcp1 = Get-DhcpServerv4Lease -ComputerName $dhcp1Name -ScopeId $scopeId -AllLeases
+$dhcp2 = Get-DhcpServerv4Lease -ComputerName $dhcp2Name -ScopeId $scopeId -AllLeases
+ 
+# Create lookup table for faster matching
+$dhcp2Lookup = @{}
+foreach ($lease in $dhcp2) {
+    $dhcp2Lookup[$lease.IPAddress] = $lease
+}
+ 
+# Build comparison results
+$results = foreach ($lease1 in $dhcp1) {
+ 
+    $lease2 = $dhcp2Lookup[$lease1.IPAddress]
+ 
+    if (-not $lease2) {
+        # Exists only on DHCP1
+        [PSCustomObject]@{
+            IPAddress       = $lease1.IPAddress
+            Status          = "Only on DHCP1"
+            DHCP1_Name      = $lease1.HostName
+            DHCP1_ClientId  = $lease1.ClientId
+            DHCP1_State     = $lease1.AddressState
+            DHCP2_Name      = ""
+            DHCP2_ClientId  = ""
+            DHCP2_State     = ""
+        }
+    }
+    elseif ($lease1.ClientId -ne $lease2.ClientId) {
+        # Conflict: same IP, different client
+        [PSCustomObject]@{
+            IPAddress       = $lease1.IPAddress
+            Status          = "CONFLICT"
+            DHCP1_Name      = $lease1.HostName
+            DHCP1_ClientId  = $lease1.ClientId
+            DHCP1_State     = $lease1.AddressState
+            DHCP2_Name      = $lease2.HostName
+            DHCP2_ClientId  = $lease2.ClientId
+            DHCP2_State     = $lease2.AddressState
+        }
+    }
+}
+ 
+# Check for leases only on DHCP2
+$dhcp1IPs = $dhcp1.IPAddress
+$dhcp2Only = foreach ($lease2 in $dhcp2) {
+    if ($lease2.IPAddress -notin $dhcp1IPs) {
+        [PSCustomObject]@{
+            IPAddress       = $lease2.IPAddress
+            Status          = "Only on DHCP2"
+            DHCP1_Name      = ""
+            DHCP1_ClientId  = ""
+            DHCP1_State     = ""
+            DHCP2_Name      = $lease2.HostName
+            DHCP2_ClientId  = $lease2.ClientId
+            DHCP2_State     = $lease2.AddressState
+        }
+    }
+}
+ 
+# Combine results
+$final = $results + $dhcp2Only
+ 
+# Sort for readability
+$final = $final | Sort-Object Status, IPAddress
+ 
+# Output nicely
+$final | Format-Table -AutoSize

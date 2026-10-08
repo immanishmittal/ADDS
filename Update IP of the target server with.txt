@@ -1,0 +1,53 @@
+Update IP of the target server with a temp IP
+Assign the IP of the target server to the new server
+ 
+ipconfig /registerDNS on both server
+nltest /dsregdns on both server
+restart the servers
+ 
+Do ping test against the hostname of the new server and IP address of the old server.
+- ensure IP and Hostname are properly mapped before proceeding.
+ 
+Perform health check
+- check sysvol and netlogon folders are accessible
+- run "repadmin /replsum"
+- Get-Service NTDS,DNS,Netlogon,KDC,W32Time # ensure services started without any errors
+- Get-WinEvent -LogName System -MaxEvents 5000 (of Tim's script)
+	(System, Application, DNS Server, Directgory Server)
+ 
+ 
+Uninstall-ADDSDomainController -RemoveApplicationPartitions -LocalAdministratorPassword (ConvertTo-SecureString "Shropshire1" -AsPlainText -Force) -IgnoreLastDNSServerForZone -Force
+ 
+(Get-CimInstance Win32_ComputerSystem).DomainRole
+ 
+Uninstall-WindowsFeature AD-Domain-Services,DNS -IncludeManagementTools -Restart
+
+Get-DnsServerResourceRecord -ZoneName "me.emh.org" | where {$_.Hostname -eq "DCNL01"}
+
+
+
+Get-WindowsFeature AD-Domain-Services,DNS
+Get-Service NTDS,DNS -ErrorAction SilentlyContinue
+(Get-CimInstance Win32_ComputerSystem).DomainRole
+Get-ADDomainController -Filter * | Select HostName
+repadmin /replsummary
+
+netsh interface ipv4 set dnsservers name="Ethernet" source=dhcp
+
+netsh interface ipv4 set dnsservers name="Ethernet" source=static address=10.18.1.132 validate=no
+netsh interface ipv4 add dnsservers name="Ethernet" address=10.19.133.106 index=2
+netsh interface ipv4 add dnsservers name="Ethernet" address=10.20.23.228 index=3
+netsh interface ipv4 add dnsservers name="YOUR_INTERFACE_NAME" address=1.0.0.1 index=4
+
+
+Set-DnsServerForwarder -IPAddress @(
+2
+"192.168.1.10",
+3
+"192.168.1.11",
+4
+"1.1.1.1",
+5
+"8.8.8.8"
+6
+)

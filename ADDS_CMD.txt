@@ -1,0 +1,19 @@
+dcdiag - This command can be used to run a diagnostic test on the domain controllers in an Active Directory domain.
+netdom query fsmo - This command can be used to display the Flexible Single Master Operations (FSMO) roles that are currently held by domain controllers in the domain.
+ntdsutil - This command can be used to perform maintenance tasks on the Active Directory database, such as defragmenting or repairing the database.
+repadmin - This command can be used to troubleshoot replication issues between domain controllers in the domain.
+dnslint - This command can be used to diagnose and fix DNS problems on domain controllers.
+dnslint /s domaincontroller /ad - This command can be used to check the consistency of the Active Directory DNS data on a specific domain controller.
+dnslint /s domaincontroller /testdsintegrity - This command can be used to check the integrity of the DNS data stored in the Active Directory on a specific domain controller.
+dnslint /s domaincontroller /testgpos - This command can be used to check the integrity of the Group Policy Objects (GPOs) that are associated with the DNS data stored in the Active Directory on a specific domain controller.
+netstat -ano - This command can be used to display active TCP connections and their associated process IDs on a domain controller.
+netstat -e - This command can be used to display detailed statistics about the network adapters on a domain controller, including the number of bytes and packets sent and received.
+dsquery - This command can be used to search for and display information about objects in the Active Directory. For example, to search for all users with the last name "Smith," you can use the command dsquery user -ln Smith.
+dsget - This command can be used to retrieve specific attributes of an object in the Active Directory. For example, to display the distinguished name of a user with the username "john.doe," you can use the command dsget user "cn=john.doe,cn=users,dc=example,dc=com" -dn.
+dsmod - This command can be used to modify attributes of an object in the Active Directory. For example, to change the password of a user with the username "john.doe," you can use the command dsmod user "cn=john.doe,cn=users,dc=example,dc=com" -pwd P@ssw0rd.
+dsrm - This command can be used to delete an object from the Active Directory. For example, to delete a user with the username "john.doe," you can use the command dsrm "cn=john.doe,cn=users,dc=example,dc=com".
+dcdiag - This command can be used to run a diagnostic test on the Active Directory domain controllers. For example, to run all tests on the domain controller "dc1.example.com," you can use the command dcdiag /s:dc1.example.com.
+netdom - This command can be used to manage the membership of a computer in an Active Directory domain. For example, to add a computer "pc1" to the domain "example.com," you can use the command netdom join pc1 /domain:example.com /userd:administrator /passwordd:P@ssw0rd.
+repadmin - This command can be used to troubleshoot replication issues in the Active Directory. For example, to check the replication status of all domain controllers in the domain "example.com," you can use the command repadmin /showrepl example.com.
+ntdsutil - This command can be used to perform maintenance tasks on the Active Directory database. For example, to defragment the database on a domain controller "dc1," you can use the command ntdsutil "activate instance ntds" defragment.
+ldifde - This command can be used to import and export data from the Active Directory

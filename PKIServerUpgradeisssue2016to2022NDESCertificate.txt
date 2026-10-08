@@ -1,0 +1,207 @@
+Before the in-place upgrade of Server 2016 to 2022, did this server host Active Directory Certificate Services?
+If not, which server works as your Certificate Authority?
+Did this same server host your CRL Distribution point or OCSP services?
+Did you previously work with our Intune team to add in the Intune Connector for a SCEP/NDES role? (This feature is necessary for enrolling devices with certificates via Intune)
+If you opened another Certificate Authority in your environment, can you open “pkiview.msc” and provide us with what you see?
+ 
+
+
+Hello again team,
+
+ 
+
+Thank you again for your time on the Teams meeting today. We met to review the issue you’re seeing with enrolling new mobile devices via Intune Connector with SCEP services.
+
+ 
+
+We reviewed the basic functions of your Certificate Authority and PKI environment. It looked as though all services were working as intended.
+
+ 
+
+- You had identified that the URL you reach for the Intune site to test was resulting in an HTTP 500, where a 403.1 was expected.
+
+ 
+
+This led us to investigate the permissions on the NDES server itself, allowing the Service Accounts to “Impersonate a user after authentication”. When we opened the Local Security Policy (Secpol.msc) on the NDES server, we confirmed the “IIS_IUSRS” group was missing, as the Service Accounts within that group should be granted those permissions.
+
+ 
+
+Ref article: Configure Network Device Enrollment Service to use a domain user account for Active Directory Certificate Services | Microsoft Learn
+https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/create-domain-user-account-ndes-service-account
+ 
+
+Defaults confirmed in: Default permissions and user rights in IIS - Internet Information Services | Microsoft Learn
+
+ https://learn.microsoft.com/en-us/troubleshoot/developer/webapps/iis/www-administration-management/default-permissions-user-rights#default-windows-user-rights-assignments
+
+The likely root cause is that you have a GPO that is configured to have a WMI filter that targets all Server 2022 member servers, so when the in-place upgrade occurred, it enforced that new GPO.
+
+ 
+
+ 
+
+ 
+
+Action Plan:
+
+There are a few ways to approach this issue. We would suggest modifying the GPO that enforces the “Impersonate a client after authentication” setting and setting it to “Not Configured”. Note that this does not add the group back, as changes to a GPO do not revert settings that have previously been enforced. You would then have to manually add in the “IIS_IUSRS” group to the local security policy for “Impersonate a client after authentication”.
+
+If you would like to enforce the Default settings for this policy and permission, you may simply add “IIS_Iusers” to the GPO and update Group Policy on all machines, before you set it to “Not Configured”.
+
+ 
+
+ 
+
+I hope this information is helpful. As we agreed, you would let us know once you’ve been able to reconfigure this “Impersonate a client after authentication” policy and then test the enrollment again. We can meet after that if further troubleshooting is needed, or you can confirm the services are working again.
+
+
+
+
+In this case, we would want to see what the next reason for the failed request would be.
+
+On the same NDES server you configured for the User Rights Assignment, you can enable Failed Request Tracing in IIS using this article:
+
+https://urldefense.com/v3/__https:/learn.microsoft.com/en-us/troubleshoot/developer/webapps/iis/health-diagnostic-performance/troubleshoot-failed-requests-using-tracing-in-iis-85__;!!IqUcNYopQPk7!MdH6lsDXL5xpyrPSuB4YwsliZiRznPLKKY66allbbDKKRGHSXF2f9XREmxWDT7dMh1EsNZuTAEcGw7mh4o54Z_IedKPi$
+
+
+Troubleshoot failed requests using tracing in IIS - Internet Information Services | Microsoft Learn
+By default, the IIS logs are located at \inetpub\logs\LogFiles\W3SVC1\.
+
+ 
+
+Additionally, there are a few checks we can perform to see if this issue lines up with the signature we see in this article: https://learn.microsoft.com/en-us/troubleshoot/mem/intune/certificates/certificateregistrationsvc-verify-request-error
+
+https://urldefense.com/v3/__https:/learn.microsoft.com/en-us/troubleshoot/mem/intune/certificates/certificateregistrationsvc-verify-request-error__;!!IqUcNYopQPk7!MdH6lsDXL5xpyrPSuB4YwsliZiRznPLKKY66allbbDKKRGHSXF2f9XREmxWDT7dMh1EsNZuTAEcGw7mh4o54Z9Ope039$
+ 
+
+               - Ensure that this does not appear in the System event logs:
+
+“The System event log on the computer that's running the Microsoft Intune NDES Connector contains an Event ID 5009 warning that includes the following:
+
+A process serving application pool 'SCEP' terminated unexpectedly. The process id was '<ProcessID>'. The process exit code was '0x0000374'.”
+
+
+Thank you for your time while we investigated the certificate enrollment issue that started after the in-place upgrade of your CA/CRL servers from Windows Server 2016 to Windows Server 2022.
+
+I wanted to send a follow-up email that summarizes our activities today and steps to take, next.
+
+
+What we observed
+
+New mobile devices were unable to obtain certificates via Intune/NDES (SCEP), preventing enrollment/usage as expected.
+On the NDES/IIS side, requests to the SCEP endpoint were returning HTTP 500 for:
+/certsrv/mscep/mscep.dll
+On the NDES server, the Application log showed NDES errors such as:
+Event ID 2 (“Network Device Enrollment Service cannot be started”) and
+Event ID 8 (“cannot retrieve information about the Certification Authority”), both with error 0x80004005 (unspecified error).
+
+What we changed (and what you confirmed)
+
+The symptoms aligned with the NDES server being unable to complete required DCOM/RPC calls to the issuing CA.
+On the issuing CA, you added the following groups to the local “Distributed COM Users” group:
+Domain Computers
+Domain Users
+After this change, you indicated the behavior improved and the SCEP URL results in an HTTP 403 again.
+However, we noticed there are intermittent results with mobile devices
+
+Why this might have surfaced after the upgrade
+
+Even if this membership wasn’t previously required in your environment, an OS upgrade (or a security policy/permissions reset applied during/after the upgrade) can change or re-apply DCOM security restrictions. This can result in NDES/Intune certificate enrollment failing until the appropriate DCOM permissions are restored.
+
+At this time, it isn’t clear what changed but I will take the time to review any other defaults that could have.
+ 
+
+Next steps / follow-up
+
+Please continue monitoring new enrollments and let us know if any devices still fail to obtain certificates.
+As discussed, we will follow up next Monday with our Microsoft Intune team to review the Intune connector/NDES integration end-to-end and confirm there are no additional configuration items to address after the server upgrades.
+If anything changes before then (for example, HTTP 500 returns again, or new devices still can’t enroll), feel free to reply with a timestamp and we can review the corresponding IIS/NDES events right away.
+
+ 
+
+ 
+
+For our reference, this article is one that also highlights the setup steps for the NDES server and Intune Connector, from scratch
+
+https://techcommunity.microsoft.com/blog/intunecustomersuccess/support-tip---how-to-configure-ndes-for-scep-certificate-deployments-in-intune/455125
+
+
+
+Success, we have Intune at PHC up and running.
+Issues were twofold.
+After the CA server upgrade to Server 2022. Microsoft changed the way they set security on the DCOM services, and that's what broke the whole thing.
+-After working with Microsoft and allowing the Service account for Intune to have rights to access the decom services, that fixed the communication issues to the CA and NDES server.
+-The second part was the session tab on the CA templates, called Subject Name, which did not align with what we were asking for in Intune to validate the Cert.
+We had always questioned the settings here, but now we know what they should be, and set them. How they worked the first couple of months is unknown. The settings needed to be changed for all this to work. But now we know what they should be. Microsoft is also writing up its findings and will send them.DCOM
+
+ 
+The Errors on the Ndes server have also all cleared up.
+
+
+
+
+Hello Jayson and team,
+
+ 
+
+Thank you for your patience while I reviewed the pre-requisites. I do need to make a few corrections to what we’ve understood so far.
+
+ 
+
+First, I had stated that “Supply in the request” was not the preferred choice. However, in an NDES solution without the Intune Connector, this would be true. It seems that with the Intune Connector, “Supply in the request” is required: Configure infrastructure to support SCEP certificate profiles with Microsoft Intune - Microsoft Intune | Microsoft Learn
+
+https://learn.microsoft.com/en-us/intune/fundamentals/certificates/scep-infrastructure#create-the-scep-certificate-template
+
+
+Next, we were able to get the Intune Connector to a working state by granting the NDES service account the privileges that the “Distributed COM Users” local security group on the NDES server. I have not found any documentation (publicly) that indicates this is a resolution to the HTTP 500 error we were seeing before with the NDES services. Nor was I able to find documentation of any changes to DCOM (Component Services) between OS versions. Without setting up auditing to determine specifics, I cannot say what permissions were granted that suddenly resolved the original HTTP 500 error.
+
+https://learn.microsoft.com/en-us/intune/fundamentals/certificates/connector/prerequisites#accounts
+
+All pre-requisites for getting the NDES server ready for the Intune Connector are found here: Prerequisites for the Certificate Connector for Microsoft Intune - Microsoft Intune | Microsoft Learn
+According to Microsoft's Intune Certificate Connector prerequisites, the NDES application pool account (often called the NDES service account) must:
+                                                                              i.        Be configured as the NDES application pool identity.
+
+                                                                            ii.        Be a member of the IIS_IUSRS local group on the NDES server.
+
+                                                                          iii.       Have Read and Enroll permissions on each SCEP certificate template that NDES will issue.
+
+
+Finally, regarding the security concern ESC1 of “Supply in the request”, this was implicitly-addressed in the guidance for setting up the Intune Connector (See above article).
+For Intune SCEP deployments, Microsoft's guidance is not to change the template to Build from Active Directory. Instead:
+                                                                              i.        Restrict enrollment permissions to the NDES service account and required administrators.
+
+                                                                            ii.        Ensure only the NDES/Intune workflow can enroll against the template.
+
+                                                                          iii.       Review template EKUs.
+
+                                                                          iv.        Follow AD CS hardening guidance.
+
+ 
+
+ 
+
+I hope this information is helpful. Please let us know if you have any further questions or concerns from here.
+
+ 
+
+We will wait for your update and follow up in a few days.
+
+
+
+==================================================================================================================================
+
+Diagnostics / Findings (What we reviewed)
+During troubleshooting, we correlated the issue to NDES/Intune SCEP traffic and CA communication:
+
+IIS/NDES traffic to the SCEP endpoint (/certsrv/mscep/mscep.dll) was returning HTTP 500.
+
+NDES was logging Event ID 2 and Event ID 8 with 0x80004005, consistent with an NDES-to-CA communication/permissions problem.
+
+Resolution (What was changed and confirmed working)
+Per your update, the issue was resolved after addressing two items:
+
+DCOM/permissions: granting the appropriate rights (via group membership) so the Intune/NDES service account could successfully communicate with the CA/NDES components.
+
+Certificate template configuration: updating the Subject Name settings on the CA templates to align with what Intune/NDES was requesting.
+
+You also confirmed that NDES errors cleared and that Intune certificate enrollment is now functioning again.

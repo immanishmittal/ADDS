@@ -1,0 +1,38 @@
+Import-Module ActiveDirectory
+
+# Get all online, enabled Windows Servers
+$servers = Get-ADComputer -Filter {OperatingSystem -like "*Server*" -and Enabled -eq "true"} -Properties OperatingSystem, DNSHostName
+$report = @()
+
+foreach ($server in $servers) {
+    # Compatible name check for PowerShell 5.1 and older
+    if ($server.DNSHostName) {
+        $name = $server.DNSHostName
+    } else {
+        $name = $server.Name
+    }
+    
+    if (Test-Connection -ComputerName $name -Count 1 -Quiet) {
+        try {
+            $system = Get-CimInstance -ClassName Win32_ComputerSystem -ComputerName $name -ErrorAction Stop
+            $bios   = Get-CimInstance -ClassName Win32_BIOS -ComputerName $name -ErrorAction Stop
+            
+            # Identify physical vs virtual machine
+            if ($system.Model -notmatch "VMware|Virtual|KVM|Xen|QEMU|Hyper-V") {
+                $report += [PSCustomObject]@{
+                    "Server Name"      = $name
+                    "Operating System" = $server.OperatingSystem
+                    "Manufacturer"     = $system.Manufacturer
+                    "Model"            = $system.Model
+                    "Serial Number"    = $bios.SerialNumber
+                }
+            }
+        } catch {
+            Write-Warning "Failed to query hardware details for $name"
+        }
+    }
+}
+
+# Export the collected list directly to CSV
+$report | Export-Csv -Path "C:\PhysicalServerInventory.csv" -NoTypeInformation
+Write-Host "Export completed! File saved to C:\PhysicalServerInventory.csv"
